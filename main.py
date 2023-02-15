@@ -19,70 +19,53 @@ from utils.jprint import jprint
 # Pull bid/ask from exchanges, save to S3 at midnight
 # =============================================================================
 class YieldPuller:
-    def __init__(self, _id):
-        self._id = _id
-        self.interval = self.ask_user_for_interval()
+    def __init__(self, interval, tokens):
+        self.interval = interval
+        self.tokens = tokens
 
     # =============================================================================
-    # MAIN function that executes infinitely and saves midnight
+    # MAIN
     # =============================================================================
     def main(self):
-        self.reset_for_new_day()
         self.sleep_to_desired_interval()
         while True:
-            if determine_if_new_day(self.midnight):
-                self.handle_midnight_event()
-            self.get_current_bond_yield()
+            self.get_data_for_all_tokens()
             self.sleep_to_desired_interval()
 
     # =============================================================================
-    # It's midnight! Save important data and reset for next day
+    # Iterate over all tokens and get data
     # =============================================================================
-    def handle_midnight_event(self):
-        pass
+    def get_data_for_all_tokens(self):
+        for token in self.tokens:
+            markets = self.get_markets_for_token(token)
+            prices = self.get_bond_prices(markets)
+            print(prices)
 
     # =============================================================================
-    # Reset all values that start a new with new day
+    # Get array of market IDs for specific token
     # =============================================================================
-    def reset_for_new_day(self):
-        self.today = determine_today_str_timestamp()
-        self.midnight = determine_next_midnight()
+    def get_markets_for_token(self, token) -> list:
+        return CONTRACT.functions.liveMarketsFor(token_=token, isPayout_=True).call()
 
     # =============================================================================
-    # Fetch current bond yield from Blockchain
+    # Get the live market price for the bond
     # =============================================================================
-    def get_current_bond_yield(self):
-        cur_price = self.get_current_bond_price()
-        jprint(cur_price)
-
-    # =============================================================================
-    # Get current bond price
-    # =============================================================================
-    def get_current_bond_price(self):
-        return dec(CONTRACT.functions.marketPrice(self._id).call())
-
-    # =============================================================================
-    #
-    # HELPERS
-    #
-    # =============================================================================
-
-    # =============================================================================
-    # Ask user for interval on how often to fetch bid/ask
-    # =============================================================================
-    def ask_user_for_interval(self):
-        inp = int(input("Specify the desired interval in seconds: ").strip())
-        if inp < 5:
-            raise ValueError("Interval is too small. Execution cancelled.")
-        return inp
+    def get_bond_prices(self, markets):
+        prices = {}
+        for market in markets:
+            price = CONTRACT.functions.marketPrice(market).call()
+            prices[market] = price
+        return prices
 
     # =============================================================================
     # Sleep until top of minute, hour, etc
     # =============================================================================
     def sleep_to_desired_interval(self):
-        time.sleep(float(self.interval) - (time.time() % float(self.interval)))
+        i = self.interval
+        time.sleep(float(i) - (time.time() % float(i)))
 
 
 if __name__ == "__main__":
-    obj = YieldPuller(4)
+    tokens = ["0xc770EEfAd204B5180dF6a14Ee197D99d808ee52d"]
+    obj = YieldPuller(5, tokens)
     obj.main()
